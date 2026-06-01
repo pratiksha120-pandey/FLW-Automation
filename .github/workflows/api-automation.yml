@@ -1,4 +1,4 @@
-name: API Automation - Postman + Newman
+name: API Automation
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
       environment:
         description: "Target environment"
         required: false
-        default: "staging"
+        default: "uat"
         type: choice
         options:
           - staging
@@ -18,7 +18,7 @@ on:
         type: string
 
   schedule:
-    - cron: "30 2 * * *"
+    - cron: "30 4 * * *" 
 
   push:
     branches:
@@ -101,10 +101,18 @@ jobs:
             --environment environment.json \
             --reporters cli,htmlextra,junit \
             --reporter-htmlextra-export "${{ env.REPORTS_DIR }}/report.html" \
-            --reporter-htmlextra-title "API Test Report" \
+            --reporter-htmlextra-title "FLW API - Automation Report" \
+            --reporter-htmlextra-browserTitle "FLW API Tests" \
+            --reporter-htmlextra-showOnlyFails false \
+            --reporter-htmlextra-testPaging true \
             --reporter-htmlextra-showEnvironmentData true \
+            --reporter-htmlextra-showGlobalData true \
+            --reporter-htmlextra-showMarkdownLinks true \
+            --reporter-htmlextra-logs true \
             --reporter-junit-export "${{ env.REPORTS_DIR }}/junit-report.xml" \
-            --timeout-request 120000 \
+            --timeout-request 60000 \
+            --delay-request 300 \
+            --insecure \
             --color on \
             2>&1 | tee "${{ env.REPORTS_DIR }}/cli-output.txt"
 
