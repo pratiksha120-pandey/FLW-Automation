@@ -50,7 +50,7 @@ jobs:
 
       - name: Install Newman and reporters
         run: |
-          npm install -g newman newman-reporter-htmlextra newman-reporter-junit
+          npm install -g newman newman-reporter-htmlextra newman-reporter-junitfull
 
       - name: Prepare report directory
         run: mkdir -p ${{ env.REPORTS_DIR }}
