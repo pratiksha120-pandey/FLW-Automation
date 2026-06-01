@@ -18,7 +18,7 @@ on:
         type: string
 
   schedule:
-    - cron: "30 2 * * *"   # Daily 8:00 AM IST
+    - cron: "30 2 * * *"
 
   push:
     branches:
@@ -50,9 +50,7 @@ jobs:
 
       - name: Install Newman and reporters
         run: |
-          npm install -g newman \
-            newman-reporter-htmlextra \
-            newman-reporter-junitfull
+          npm install -g newman newman-reporter-htmlextra newman-reporter-junitfull
 
       - name: Prepare report directory
         run: mkdir -p ${{ env.REPORTS_DIR }}
@@ -62,91 +60,51 @@ jobs:
           POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
           POSTMAN_COLLECTION_UID: ${{ secrets.POSTMAN_COLLECTION_UID }}
         run: |
-          echo "Fetching collection: $POSTMAN_COLLECTION_UID"
+          echo "Fetching collection..."
           HTTP_STATUS=$(curl -s -o collection.json -w "%{http_code}" \
             --retry 3 --retry-delay 5 \
             -H "X-Api-Key: $POSTMAN_API_KEY" \
             "$POSTMAN_BASE_URL/collections/$POSTMAN_COLLECTION_UID")
-
+          echo "HTTP Status: $HTTP_STATUS"
           if [ "$HTTP_STATUS" != "200" ]; then
-            echo "ERROR: Failed to fetch collection (HTTP $HTTP_STATUS)"
+            echo "ERROR: Failed to fetch collection"
             cat collection.json
             exit 1
           fi
-
-          TOTAL_REQUESTS=$(node -e "
-            const c = require('./collection.json');
-            let count = 0;
-            function countRequests(items) {
-              if (!items) return;
-              items.forEach(item => {
-                if (item.request) count++;
-                if (item.item) countRequests(item.item);
-              });
-            }
-            countRequests(c.collection.item);
-            console.log(count);
-          ")
-
-          echo "Collection fetched. Total requests: $TOTAL_REQUESTS"
-          echo "TOTAL_REQUESTS=$TOTAL_REQUESTS" >> $GITHUB_ENV
-          echo "COLLECTION_NAME=$(node -e \"console.log(require('./collection.json').collection.info.name)\")" >> $GITHUB_ENV
+          node scripts/fetch-collection.js collection
 
       - name: Fetch latest Postman Environment
         env:
           POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
           POSTMAN_ENVIRONMENT_UID: ${{ secrets.POSTMAN_ENVIRONMENT_UID }}
         run: |
-          echo "Fetching environment: $POSTMAN_ENVIRONMENT_UID"
+          echo "Fetching environment..."
           HTTP_STATUS=$(curl -s -o environment_raw.json -w "%{http_code}" \
             --retry 3 --retry-delay 5 \
             -H "X-Api-Key: $POSTMAN_API_KEY" \
             "$POSTMAN_BASE_URL/environments/$POSTMAN_ENVIRONMENT_UID")
-
+          echo "HTTP Status: $HTTP_STATUS"
           if [ "$HTTP_STATUS" != "200" ]; then
-            echo "ERROR: Failed to fetch environment (HTTP $HTTP_STATUS)"
+            echo "ERROR: Failed to fetch environment"
             cat environment_raw.json
             exit 1
           fi
-
-          node -e "
-            const raw = require('./environment_raw.json');
-            const env = raw.environment;
-            const newman_env = {
-              id: env.id,
-              name: env.name,
-              values: env.values.map(v => ({
-                key: v.key,
-                value: v.value,
-                enabled: v.enabled !== false,
-                type: v.type || 'default'
-              }))
-            };
-            require('fs').writeFileSync('environment.json', JSON.stringify(newman_env, null, 2));
-            console.log('Environment ready:', env.name, '| Variables:', env.values.length);
-          "
-          echo "ENV_NAME=$(node -e \"console.log(require('./environment_raw.json').environment.name)\")" >> $GITHUB_ENV
+          node scripts/fetch-collection.js environment
 
       - name: Execute Newman
         id: newman_run
-        env:
-          NEWMAN_TIMEOUT: "120000"
         run: |
           set +e
-
           START_TIME=$(date +%s)
 
           newman run collection.json \
             --environment environment.json \
             --reporters cli,htmlextra,junitfull \
             --reporter-htmlextra-export "${{ env.REPORTS_DIR }}/report.html" \
-            --reporter-htmlextra-title "${{ env.COLLECTION_NAME }} - API Test Report" \
-            --reporter-htmlextra-browserTitle "${{ env.COLLECTION_NAME }}" \
-            --reporter-htmlextra-showOnlyFails false \
-            --reporter-htmlextra-testPaging true \
+            --reporter-htmlextra-title "API Test Report" \
             --reporter-htmlextra-showEnvironmentData true \
             --reporter-junitfull-export "${{ env.REPORTS_DIR }}/junit-report.xml" \
-            --timeout-request $NEWMAN_TIMEOUT \
+            --timeout-request 120000 \
             --color on \
             2>&1 | tee "${{ env.REPORTS_DIR }}/cli-output.txt"
 
@@ -174,24 +132,24 @@ jobs:
       - name: Send email notification
         if: always()
         env:
-          SMTP_USER:        ${{ secrets.SMTP_USER }}
-          SMTP_PASS:        ${{ secrets.SMTP_PASS }}
-          SMTP_HOST:        ${{ secrets.SMTP_HOST }}
-          SMTP_PORT:        ${{ secrets.SMTP_PORT }}
-          NOTIFY_EMAIL:     ${{ inputs.notify_email || secrets.NOTIFY_EMAIL }}
-          TESTS_TOTAL:      ${{ env.TESTS_TOTAL }}
-          TESTS_PASSED:     ${{ env.TESTS_PASSED }}
-          TESTS_FAILED:     ${{ env.TESTS_FAILED }}
-          FAILURE_DETAILS:  ${{ env.FAILURE_DETAILS }}
-          EXECUTION_TIME:   ${{ env.EXECUTION_TIME }}
-          COLLECTION_NAME:  ${{ env.COLLECTION_NAME }}
-          ENV_NAME:         ${{ env.ENV_NAME }}
-          TOTAL_REQUESTS:   ${{ env.TOTAL_REQUESTS }}
-          NEWMAN_EXIT_CODE: ${{ env.NEWMAN_EXIT_CODE }}
-          GITHUB_RUN_URL:   "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          SMTP_USER:         ${{ secrets.SMTP_USER }}
+          SMTP_PASS:         ${{ secrets.SMTP_PASS }}
+          SMTP_HOST:         ${{ secrets.SMTP_HOST }}
+          SMTP_PORT:         ${{ secrets.SMTP_PORT }}
+          NOTIFY_EMAIL:      ${{ inputs.notify_email || secrets.NOTIFY_EMAIL }}
+          TESTS_TOTAL:       ${{ env.TESTS_TOTAL }}
+          TESTS_PASSED:      ${{ env.TESTS_PASSED }}
+          TESTS_FAILED:      ${{ env.TESTS_FAILED }}
+          FAILURE_DETAILS:   ${{ env.FAILURE_DETAILS }}
+          EXECUTION_TIME:    ${{ env.EXECUTION_TIME }}
+          COLLECTION_NAME:   ${{ env.COLLECTION_NAME }}
+          ENV_NAME:          ${{ env.ENV_NAME }}
+          TOTAL_REQUESTS:    ${{ env.TOTAL_REQUESTS }}
+          NEWMAN_EXIT_CODE:  ${{ env.NEWMAN_EXIT_CODE }}
+          GITHUB_RUN_URL:    "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
-          TRIGGERED_BY:     ${{ github.event_name }}
-          BRANCH:           ${{ github.ref_name }}
+          TRIGGERED_BY:      ${{ github.event_name }}
+          BRANCH:            ${{ github.ref_name }}
         run: node scripts/send-email.js
 
       - name: Evaluate test results
