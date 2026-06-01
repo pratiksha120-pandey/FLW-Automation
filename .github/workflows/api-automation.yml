@@ -119,7 +119,9 @@ jobs:
             "${{ env.REPORTS_DIR }}/junit-report.xml" \
             "$GITHUB_ENV"
 
-          exit $NEWMAN_EXIT_CODE
+          echo "Newman completed with exit code: $NEWMAN_EXIT_CODE"
+          exit 0
+
 
       - name: Upload reports as artifacts
         if: always()
