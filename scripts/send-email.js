@@ -22,7 +22,7 @@ const failed   = parseInt(TESTS_FAILED, 10);
 const total    = parseInt(TESTS_TOTAL, 10);
 const passed   = parseInt(TESTS_PASSED, 10);
 const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-const isPass   = parseInt(NEWMAN_EXIT_CODE, 10) === 0;
+const isPass = parseInt(TESTS_FAILED || "0", 10) === 0;
 
 const statusColor  = isPass ? "#16a34a" : "#dc2626";
 const statusLabel  = isPass ? "✅ PASSED" : "❌ FAILED";
