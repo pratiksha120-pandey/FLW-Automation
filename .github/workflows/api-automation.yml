@@ -1,83 +1,132 @@
 name: FLW API Automation
 
 on:
-  workflow_dispatch:
+workflow_dispatch:
 
-  schedule:
-    - cron: "30 4 * * *"
+schedule:
+- cron: "30 4 * * *"
 
 env:
-  POSTMAN_BASE_URL: https://api.getpostman.com
-  REPORTS_DIR: newman-reports
+POSTMAN_BASE_URL: https://api.getpostman.com
+REPORTS_DIR: newman-reports
 
 jobs:
-  run-api-tests:
+run-api-tests:
 
-    runs-on: ubuntu-latest
+runs-on: ubuntu-latest
 
-    steps:
+steps:
 
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+  - name: Checkout Repository
+    uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+  - name: Setup Node
+    uses: actions/setup-node@v4
+    with:
+      node-version: 20
 
-      - name: Install Newman
-        run: |
-          npm install -g newman
-          npm install -g newman-reporter-htmlextra
+  - name: Install Newman
+    run: |
+      npm install -g newman
+      npm install -g newman-reporter-htmlextra
 
-      - name: Create Report Folder
-        run: mkdir -p ${{ env.REPORTS_DIR }}
+  - name: Create Report Directory
+    run: |
+      mkdir -p ${{ env.REPORTS_DIR }}
 
-      - name: Fetch Collection
-        env:
-          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
-          POSTMAN_COLLECTION_UID: ${{ secrets.POSTMAN_COLLECTION_UID }}
-        run: |
-          curl \
-          -H "X-Api-Key: $POSTMAN_API_KEY" \
-          "$POSTMAN_BASE_URL/collections/$POSTMAN_COLLECTION_UID" \
-          -o collection.json
+  - name: Fetch Collection
+    env:
+      POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+      POSTMAN_COLLECTION_UID: ${{ secrets.POSTMAN_COLLECTION_UID }}
+    run: |
+      curl \
+        -H "X-Api-Key: $POSTMAN_API_KEY" \
+        "${{ env.POSTMAN_BASE_URL }}/collections/$POSTMAN_COLLECTION_UID" \
+        -o collection.json
 
-      - name: Fetch Environment
-        env:
-          POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
-          POSTMAN_ENVIRONMENT_UID: ${{ secrets.POSTMAN_ENVIRONMENT_UID }}
-        run: |
-          curl \
-          -H "X-Api-Key: $POSTMAN_API_KEY" \
-          "$POSTMAN_BASE_URL/environments/$POSTMAN_ENVIRONMENT_UID" \
-          -o environment.json
+  - name: Fetch Environment
+    env:
+      POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
+      POSTMAN_ENVIRONMENT_UID: ${{ secrets.POSTMAN_ENVIRONMENT_UID }}
+    run: |
+      curl \
+        -H "X-Api-Key: $POSTMAN_API_KEY" \
+        "${{ env.POSTMAN_BASE_URL }}/environments/$POSTMAN_ENVIRONMENT_UID" \
+        -o environment_raw.json
 
-      - name: Execute Newman
-        run: |
+  - name: Convert Environment
+    run: |
+      node scripts/fetch-collection.js environment
 
-          newman run collection.json \
-          --environment environment.json \
-          --reporters cli,htmlextra \
-          --reporter-htmlextra-export "${{ env.REPORTS_DIR }}/report.html" \
-          --reporter-htmlextra-title "FLW API Automation Report" \
-          --reporter-htmlextra-browserTitle "FLW API Automation" \
-          --reporter-htmlextra-testPaging true \
-          --reporter-htmlextra-showOnlyFails false \
-          --reporter-htmlextra-showEnvironmentData true \
-          --reporter-htmlextra-showGlobalData true \
-          --reporter-htmlextra-logs true \
-          --reporter-htmlextra-darkTheme false \
-          --timeout-request 120000 \
-          --delay-request 200 \
-          --insecure || true
+  - name: Read Collection Metadata
+    run: |
+      node scripts/fetch-collection.js collection
 
-      - name: Upload HTML Report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: FLW-Newman-Report
-          path: newman-reports/report.html
+  - name: Execute Newman
+    continue-on-error: true
+    run: |
+
+      START_TIME=$(date +%s)
+
+      newman run collection.json \
+        --environment environment.json \
+        --reporters cli,htmlextra \
+        --reporter-htmlextra-export "${{ env.REPORTS_DIR }}/report.html" \
+        --reporter-htmlextra-title "FLW API Automation Report" \
+        --reporter-htmlextra-browserTitle "FLW API Automation" \
+        --reporter-htmlextra-showEnvironmentData true \
+        --reporter-htmlextra-showGlobalData true \
+        --reporter-htmlextra-testPaging true \
+        --reporter-htmlextra-showOnlyFails false \
+        --reporter-htmlextra-logs true \
+        --timeout-request 120000 \
+        --delay-request 200 \
+        --insecure | tee newman-output.txt
+
+      END_TIME=$(date +%s)
+
+      echo "EXECUTION_TIME=$((END_TIME-START_TIME))s" >> $GITHUB_ENV
+
+  - name: Upload HTML Report
+    if: always()
+    uses: actions/upload-artifact@v4
+    with:
+      name: FLW-Newman-Report
+      path: |
+        newman-reports/report.html
+        newman-output.txt
+
+  - name: Send Email
+    if: always()
+    env:
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASS: ${{ secrets.SMTP_PASS }}
+      NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+
+      COLLECTION_NAME: ${{ env.COLLECTION_NAME }}
+      ENV_NAME: ${{ env.ENV_NAME }}
+      TOTAL_REQUESTS: ${{ env.TOTAL_REQUESTS }}
+
+      EXECUTION_TIME: ${{ env.EXECUTION_TIME }}
+
+      GITHUB_RUN_NUMBER: ${{ github.run_number }}
+      GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      TRIGGERED_BY: ${{ github.actor }}
+      BRANCH: ${{ github.ref_name }}
+
+    run: |
+      node scripts/send-email.js
+
+  - name: Workflow Summary
+    if: always()
+    run: |
+      echo "Collection : $COLLECTION_NAME"
+      echo "Environment: $ENV_NAME"
+      echo "Total APIs : $TOTAL_REQUESTS"
+      echo "Duration   : $EXECUTION_TIME"
+      echo "Workflow completed."
+
 # name: API Automation
 
 # on:
