@@ -73,7 +73,7 @@ jobs:
           "
 
       - name: Run Newman Collection
-        continue-on-error: true 
+        continue-on-error: true
         run: |
           mkdir -p reports
           newman run collection.json \
@@ -89,9 +89,7 @@ jobs:
             --reporter-htmlextra-logs true \
             --reporter-htmlextra-skipEnvironmentVars true \
             --reporter-htmlextra-skipGlobalVars true \
-            --reporter-htmlextra-darkTheme false
-             --reporter-htmlextra-hideCollectionDescription \
-             --reporter-htmlextra-expand true \
+            --reporter-htmlextra-expand true \
             --timeout-request 60000 \
             --delay-request 300 \
             --insecure \
