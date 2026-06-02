@@ -363,12 +363,25 @@ HOW TO VIEW FULL REPORT:
     ? `❌ [FAILED] ${COLLECTION_NAME} — ${passed}/${total} passed, ${failed} failed (Run #${GITHUB_RUN_NUMBER})`
     : `✅ [PASSED] ${COLLECTION_NAME} — ${passed}/${total} passed (Run #${GITHUB_RUN_NUMBER})`;
 
+  const attachments = [];
+  const reportPath  = `newman-reports/report.html`;
+
+  if (require("fs").existsSync(reportPath)) {
+    attachments.push({
+      filename: `FLW-API-Report-Run-${GITHUB_RUN_NUMBER}.html`,
+      path:     reportPath,
+      contentType: "text/html"
+    });
+    console.log("HTML report attached to email");
+  }
+
   const info = await transporter.sendMail({
-    from:    `"API Automation" <${SMTP_USER}>`,
-    to:      NOTIFY_EMAIL,
+    from:        `"API Automation" <${SMTP_USER}>`,
+    to:          NOTIFY_EMAIL,
     subject,
     text,
     html,
+    attachments,
   });
 
   console.log(`Email sent: ${info.messageId} → ${NOTIFY_EMAIL}`);
