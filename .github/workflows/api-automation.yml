@@ -83,10 +83,13 @@ jobs:
             --reporter-htmlextra-title "FLW API - Test Report" \
             --reporter-htmlextra-browserTitle "FLW API Tests" \
             --reporter-htmlextra-showOnlyFails false \
+            --reporter-htmlextra-showEnvironmentData false \
+            --reporter-htmlextra-showGlobalData false \
             --reporter-htmlextra-testPaging true \
             --reporter-htmlextra-logs true \
-             --reporter-htmlextra-skipEnvironmentVars \
-             --reporter-htmlextra-skipGlobalVars \
+            --reporter-htmlextra-skipEnvironmentVars true \
+            --reporter-htmlextra-skipGlobalVars true \
+            --reporter-htmlextra-darkTheme false
              --reporter-htmlextra-hideCollectionDescription \
             --timeout-request 60000 \
             --delay-request 300 \
