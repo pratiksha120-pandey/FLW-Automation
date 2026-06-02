@@ -85,7 +85,9 @@ jobs:
             --reporter-htmlextra-showOnlyFails false \
             --reporter-htmlextra-testPaging true \
             --reporter-htmlextra-logs true \
-            --reporter-htmlextra-showEnvironmentData false \
+             --reporter-htmlextra-skipEnvironmentVars \
+             --reporter-htmlextra-skipGlobalVars \
+             --reporter-htmlextra-hideCollectionDescription \
             --timeout-request 60000 \
             --delay-request 300 \
             --insecure \
@@ -108,7 +110,7 @@ jobs:
           username: ${{ secrets.SMTP_USER }}
           password: ${{ secrets.SMTP_PASS }}
           subject: |
-            subject: "✅ FLW API Test Report — Run #${{ github.run_number }}"
+            "✅ FLW API Test Report — Run #${{ github.run_number }}"
           body: |
             Hi Team,
 
