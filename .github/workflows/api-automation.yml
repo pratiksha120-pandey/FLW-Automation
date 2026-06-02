@@ -20,7 +20,7 @@ jobs:
           node-version: '20'
 
       - name: Install Newman and Reporter
-        run: npm install -g newman newman-reporter-htmlextra
+        run: npm install -g newman@latest newman-reporter-htmlextra@latest
 
       - name: Fetch latest Postman Collection
         env:
@@ -90,6 +90,7 @@ jobs:
             --reporter-htmlextra-skipEnvironmentVars true \
             --reporter-htmlextra-skipGlobalVars true \
             --reporter-htmlextra-expand true \
+            --reporter-htmlextra-skipSensitiveData \
             --timeout-request 60000 \
             --delay-request 300 \
             --insecure \
