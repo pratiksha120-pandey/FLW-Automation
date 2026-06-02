@@ -91,6 +91,7 @@ jobs:
             --reporter-htmlextra-skipGlobalVars true \
             --reporter-htmlextra-darkTheme false
              --reporter-htmlextra-hideCollectionDescription \
+             --reporter-htmlextra-expand true \
             --timeout-request 60000 \
             --delay-request 300 \
             --insecure \
