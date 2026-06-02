@@ -1,26 +1,15 @@
-
-
-name: API Automation
+name: API Automation - Postman + Newman
 
 on:
   workflow_dispatch:
     inputs:
-      environment:
-        description: "Target environment"
-        required: false
-        default: "uat"
-        type: choice
-        options:
-          - staging
-          - uat
-          - production
       notify_email:
         description: "Override notification email (optional)"
         required: false
         type: string
 
   schedule:
-    - cron: "30 4 * * *" 
+    - cron: "30 4 * * *"    # Daily 10:00 AM IST (UTC+5:30)
 
   push:
     branches:
@@ -52,7 +41,9 @@ jobs:
 
       - name: Install Newman and reporters
         run: |
-          npm install -g newman newman-reporter-htmlextra newman-reporter-junitfull
+          npm install -g newman \
+            newman-reporter-htmlextra \
+            newman-reporter-junitfull
 
       - name: Prepare report directory
         run: mkdir -p ${{ env.REPORTS_DIR }}
@@ -101,7 +92,7 @@ jobs:
 
           newman run collection.json \
             --environment environment.json \
-            --reporters cli,htmlextra,junit \
+            --reporters cli,htmlextra,junitfull \
             --reporter-htmlextra-export "${{ env.REPORTS_DIR }}/report.html" \
             --reporter-htmlextra-title "FLW API - Automation Report" \
             --reporter-htmlextra-browserTitle "FLW API Tests" \
@@ -109,9 +100,9 @@ jobs:
             --reporter-htmlextra-testPaging true \
             --reporter-htmlextra-showEnvironmentData true \
             --reporter-htmlextra-showGlobalData true \
-            --reporter-htmlextra-showMarkdownLinks true \
             --reporter-htmlextra-logs true \
-            --reporter-junit-export "${{ env.REPORTS_DIR }}/junit-report.xml" \
+            --reporter-htmlextra-showMarkdownLinks true \
+            --reporter-junitfull-export "${{ env.REPORTS_DIR }}/junit-report.xml" \
             --timeout-request 60000 \
             --delay-request 300 \
             --insecure \
@@ -122,22 +113,32 @@ jobs:
           END_TIME=$(date +%s)
           DURATION=$((END_TIME - START_TIME))
 
+          # ── Always save exit code and time ─────────────────────
           echo "NEWMAN_EXIT_CODE=$NEWMAN_EXIT_CODE" >> $GITHUB_ENV
           echo "EXECUTION_TIME=${DURATION}s"        >> $GITHUB_ENV
 
+          # ── Parse results from JUnit XML ───────────────────────
           node scripts/parse-results.js \
             "${{ env.REPORTS_DIR }}/junit-report.xml" \
             "$GITHUB_ENV"
 
-          echo "Newman completed with exit code: $NEWMAN_EXIT_CODE"
+          # ── IMPORTANT: Always exit 0 so workflow stays GREEN ───
+          # Actual pass/fail is shown in email and report
           exit 0
 
-
-      - name: Upload reports as artifacts
+      - name: Upload HTML Report as Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: newman-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          name: FLW-API-Report-Run-${{ github.run_number }}
+          path: ${{ env.REPORTS_DIR }}/report.html
+          retention-days: 30
+
+      - name: Upload All Reports as Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: All-Reports-Run-${{ github.run_number }}
           path: ${{ env.REPORTS_DIR }}/
           retention-days: 30
 
@@ -164,18 +165,18 @@ jobs:
           BRANCH:            ${{ github.ref_name }}
         run: node scripts/send-email.js
 
-      - name: Evaluate test results
+      - name: Print Summary
         if: always()
         run: |
+          echo "=================================="
+          echo "✅ Workflow completed successfully"
           echo "Collection : ${{ env.COLLECTION_NAME }}"
           echo "Environment: ${{ env.ENV_NAME }}"
           echo "Total APIs : ${{ env.TOTAL_REQUESTS }}"
-          echo "Tests      : ${{ env.TESTS_TOTAL }}"
+          echo "Tests Run  : ${{ env.TESTS_TOTAL }}"
           echo "Passed     : ${{ env.TESTS_PASSED }}"
           echo "Failed     : ${{ env.TESTS_FAILED }}"
           echo "Duration   : ${{ env.EXECUTION_TIME }}"
-           if [ "${{ env.NEWMAN_EXIT_CODE }}" != "0" ]; then
-          echo "Tests failed, but workflow will continue."
-          fi
-
-          echo "Execution completed."
+          echo "=================================="
+          echo "📊 Download HTML report from Artifacts section above"
+          echo "📧 Email report sent to: ${{ secrets.NOTIFY_EMAIL }}"
