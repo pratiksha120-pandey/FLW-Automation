@@ -43,7 +43,7 @@ jobs:
         run: |
           npm install -g newman \
             newman-reporter-htmlextra \
-            newman-reporter-junitfull
+            newman-reporter-junit
 
       - name: Prepare report directory
         run: mkdir -p ${{ env.REPORTS_DIR }}
@@ -92,7 +92,7 @@ jobs:
 
           newman run collection.json \
             --environment environment.json \
-            --reporters cli,htmlextra,junitfull \
+            --reporters cli,htmlextra,junit \
             --reporter-htmlextra-export "${{ env.REPORTS_DIR }}/report.html" \
             --reporter-htmlextra-title "FLW API - Automation Report" \
             --reporter-htmlextra-browserTitle "FLW API Tests" \
@@ -102,7 +102,7 @@ jobs:
             --reporter-htmlextra-showGlobalData true \
             --reporter-htmlextra-logs true \
             --reporter-htmlextra-showMarkdownLinks true \
-            --reporter-junitfull-export "${{ env.REPORTS_DIR }}/junit-report.xml" \
+            --reporter-junit-export "${{ env.REPORTS_DIR }}/junit-report.xml" \
             --timeout-request 60000 \
             --delay-request 300 \
             --insecure \
@@ -114,8 +114,16 @@ jobs:
           DURATION=$((END_TIME - START_TIME))
 
           # ── Always save exit code and time ─────────────────────
+          echo "Newman exit code: $NEWMAN_EXIT_CODE"
           echo "NEWMAN_EXIT_CODE=$NEWMAN_EXIT_CODE" >> $GITHUB_ENV
           echo "EXECUTION_TIME=${DURATION}s"        >> $GITHUB_ENV
+
+          if [ -f "${{ env.REPORTS_DIR }}/junit-report.xml" ]; then
+            echo "JUnit XML exists — first 3 lines:"
+            head -3 "${{ env.REPORTS_DIR }}/junit-report.xml"
+          else
+            echo "WARNING: JUnit XML not found"
+          fi
 
           # ── Parse results from JUnit XML ───────────────────────
           node scripts/parse-results.js \
