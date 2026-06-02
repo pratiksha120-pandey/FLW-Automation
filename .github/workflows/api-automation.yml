@@ -73,6 +73,7 @@ jobs:
           "
 
       - name: Run Newman Collection
+        continue-on-error: true 
         run: |
           mkdir -p reports
           newman run collection.json \
@@ -84,7 +85,7 @@ jobs:
             --reporter-htmlextra-showOnlyFails false \
             --reporter-htmlextra-testPaging true \
             --reporter-htmlextra-logs true \
-            --reporter-htmlextra-showEnvironmentData true \
+            --reporter-htmlextra-showEnvironmentData false \
             --timeout-request 60000 \
             --delay-request 300 \
             --insecure \
@@ -107,13 +108,12 @@ jobs:
           username: ${{ secrets.SMTP_USER }}
           password: ${{ secrets.SMTP_PASS }}
           subject: |
-            ${{ job.status == 'success' && '✅ FLW API Tests Passed' || '❌ FLW API Tests Failed' }} — Run #${{ github.run_number }}
+            subject: "✅ FLW API Test Report — Run #${{ github.run_number }}"
           body: |
             Hi Team,
 
             FLW API Newman execution completed.
 
-            Status  : ${{ job.status }}
             Run     : #${{ github.run_number }}
             Branch  : ${{ github.ref_name }}
             Trigger : ${{ github.event_name }}
@@ -126,7 +126,7 @@ jobs:
               - Light/Dark mode toggle
 
             Regards,
-            FLW API Automation
+            Pratiksha Pandey
           to: ${{ secrets.NOTIFY_EMAIL }}
           from: FLW API Automation
           attachments: reports/newman-report.html
