@@ -1,34 +1,14 @@
-name: API Automation - Postman + Newman
+name: FLW API - Newman Automation
 
 on:
-  workflow_dispatch:
-    inputs:
-      notify_email:
-        description: "Override notification email (optional)"
-        required: false
-        type: string
-
   schedule:
-    - cron: "30 4 * * *"    # Daily 10:00 AM IST (UTC+5:30)
-
-  push:
-    branches:
-      - main
-      - develop
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-
-env:
-  POSTMAN_BASE_URL: "https://api.getpostman.com"
-  NODE_VERSION: "20"
-  REPORTS_DIR: "newman-reports"
+    - cron: '30 4 * * *'    # Daily 10:00 AM IST (UTC+5:30)
+  workflow_dispatch:
 
 jobs:
-  run-api-tests:
-    name: "Fetch → Execute → Report → Notify"
+  run-newman:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -37,154 +17,116 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '20'
 
-      - name: Install Newman and reporters
-        run: |
-          npm install -g newman \
-            newman-reporter-htmlextra \
-            newman-reporter-junit
-
-      - name: Prepare report directory
-        run: mkdir -p ${{ env.REPORTS_DIR }}
+      - name: Install Newman and Reporter
+        run: npm install -g newman newman-reporter-htmlextra
 
       - name: Fetch latest Postman Collection
         env:
           POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
           POSTMAN_COLLECTION_UID: ${{ secrets.POSTMAN_COLLECTION_UID }}
         run: |
-          echo "Fetching collection..."
           HTTP_STATUS=$(curl -s -o collection.json -w "%{http_code}" \
             --retry 3 --retry-delay 5 \
             -H "X-Api-Key: $POSTMAN_API_KEY" \
-            "$POSTMAN_BASE_URL/collections/$POSTMAN_COLLECTION_UID")
-          echo "HTTP Status: $HTTP_STATUS"
+            "https://api.getpostman.com/collections/$POSTMAN_COLLECTION_UID")
+          echo "Collection fetch status: $HTTP_STATUS"
           if [ "$HTTP_STATUS" != "200" ]; then
-            echo "ERROR: Failed to fetch collection"
+            echo "Failed to fetch collection"
             cat collection.json
             exit 1
           fi
-          node scripts/fetch-collection.js collection
+          echo "Collection fetched successfully"
 
       - name: Fetch latest Postman Environment
         env:
           POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
           POSTMAN_ENVIRONMENT_UID: ${{ secrets.POSTMAN_ENVIRONMENT_UID }}
         run: |
-          echo "Fetching environment..."
           HTTP_STATUS=$(curl -s -o environment_raw.json -w "%{http_code}" \
             --retry 3 --retry-delay 5 \
             -H "X-Api-Key: $POSTMAN_API_KEY" \
-            "$POSTMAN_BASE_URL/environments/$POSTMAN_ENVIRONMENT_UID")
-          echo "HTTP Status: $HTTP_STATUS"
+            "https://api.getpostman.com/environments/$POSTMAN_ENVIRONMENT_UID")
+          echo "Environment fetch status: $HTTP_STATUS"
           if [ "$HTTP_STATUS" != "200" ]; then
-            echo "ERROR: Failed to fetch environment"
+            echo "Failed to fetch environment"
             cat environment_raw.json
             exit 1
           fi
-          node scripts/fetch-collection.js environment
+          node -e "
+            const fs   = require('fs');
+            const raw  = JSON.parse(fs.readFileSync('environment_raw.json'));
+            const env  = raw.environment;
+            const out  = {
+              id:     env.id,
+              name:   env.name,
+              values: env.values.map(v => ({
+                key:     v.key,
+                value:   v.value,
+                enabled: v.enabled !== false,
+                type:    v.type || 'default'
+              }))
+            };
+            fs.writeFileSync('environment.json', JSON.stringify(out, null, 2));
+            console.log('Environment ready:', env.name);
+          "
 
-      - name: Execute Newman
-        id: newman_run
+      - name: Run Newman Collection
         run: |
-          set +e
-          START_TIME=$(date +%s)
-
+          mkdir -p reports
           newman run collection.json \
             --environment environment.json \
-            --reporters cli,htmlextra,junit \
-            --reporter-htmlextra-export "${{ env.REPORTS_DIR }}/report.html" \
-            --reporter-htmlextra-title "FLW API - Automation Report" \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export reports/newman-report.html \
+            --reporter-htmlextra-title "FLW API - Test Report" \
             --reporter-htmlextra-browserTitle "FLW API Tests" \
             --reporter-htmlextra-showOnlyFails false \
             --reporter-htmlextra-testPaging true \
-            --reporter-htmlextra-showEnvironmentData true \
-            --reporter-htmlextra-showGlobalData true \
             --reporter-htmlextra-logs true \
-            --reporter-htmlextra-showMarkdownLinks true \
-            --reporter-junit-export "${{ env.REPORTS_DIR }}/junit-report.xml" \
+            --reporter-htmlextra-showEnvironmentData true \
             --timeout-request 60000 \
             --delay-request 300 \
             --insecure \
-            --color on \
-            2>&1 | tee "${{ env.REPORTS_DIR }}/cli-output.txt"
+            --color on
 
-          NEWMAN_EXIT_CODE=${PIPESTATUS[0]}
-          END_TIME=$(date +%s)
-          DURATION=$((END_TIME - START_TIME))
-
-          # ── Always save exit code and time ─────────────────────
-          echo "Newman exit code: $NEWMAN_EXIT_CODE"
-          echo "NEWMAN_EXIT_CODE=$NEWMAN_EXIT_CODE" >> $GITHUB_ENV
-          echo "EXECUTION_TIME=${DURATION}s"        >> $GITHUB_ENV
-
-          if [ -f "${{ env.REPORTS_DIR }}/junit-report.xml" ]; then
-            echo "JUnit XML exists — first 3 lines:"
-            head -3 "${{ env.REPORTS_DIR }}/junit-report.xml"
-          else
-            echo "WARNING: JUnit XML not found"
-          fi
-
-          # ── Parse results from JUnit XML ───────────────────────
-          node scripts/parse-results.js \
-            "${{ env.REPORTS_DIR }}/junit-report.xml" \
-            "$GITHUB_ENV"
-
-          # ── IMPORTANT: Always exit 0 so workflow stays GREEN ───
-          # Actual pass/fail is shown in email and report
-          exit 0
-
-      - name: Upload HTML Report as Artifact
+      - name: Upload Newman Report as Artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: FLW-API-Report-Run-${{ github.run_number }}
-          path: ${{ env.REPORTS_DIR }}/report.html
+          name: FLW-API-Newman-Report-Run-${{ github.run_number }}
+          path: reports/newman-report.html
           retention-days: 30
 
-      - name: Upload All Reports as Artifact
+      - name: Send Email with Newman Report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: dawidd6/action-send-mail@v3
         with:
-          name: All-Reports-Run-${{ github.run_number }}
-          path: ${{ env.REPORTS_DIR }}/
-          retention-days: 30
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          subject: |
+            ${{ job.status == 'success' && '✅ FLW API Tests Passed' || '❌ FLW API Tests Failed' }} — Run #${{ github.run_number }}
+          body: |
+            Hi Team,
 
-      - name: Send email notification
-        if: always()
-        env:
-          SMTP_USER:         ${{ secrets.SMTP_USER }}
-          SMTP_PASS:         ${{ secrets.SMTP_PASS }}
-          SMTP_HOST:         ${{ secrets.SMTP_HOST }}
-          SMTP_PORT:         ${{ secrets.SMTP_PORT }}
-          NOTIFY_EMAIL:      ${{ inputs.notify_email || secrets.NOTIFY_EMAIL }}
-          TESTS_TOTAL:       ${{ env.TESTS_TOTAL }}
-          TESTS_PASSED:      ${{ env.TESTS_PASSED }}
-          TESTS_FAILED:      ${{ env.TESTS_FAILED }}
-          FAILURE_DETAILS:   ${{ env.FAILURE_DETAILS }}
-          EXECUTION_TIME:    ${{ env.EXECUTION_TIME }}
-          COLLECTION_NAME:   ${{ env.COLLECTION_NAME }}
-          ENV_NAME:          ${{ env.ENV_NAME }}
-          TOTAL_REQUESTS:    ${{ env.TOTAL_REQUESTS }}
-          NEWMAN_EXIT_CODE:  ${{ env.NEWMAN_EXIT_CODE }}
-          GITHUB_RUN_URL:    "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
-          TRIGGERED_BY:      ${{ github.event_name }}
-          BRANCH:            ${{ github.ref_name }}
-        run: node scripts/send-email.js
+            FLW API Newman execution completed.
 
-      - name: Print Summary
-        if: always()
-        run: |
-          echo "=================================="
-          echo "✅ Workflow completed successfully"
-          echo "Collection : ${{ env.COLLECTION_NAME }}"
-          echo "Environment: ${{ env.ENV_NAME }}"
-          echo "Total APIs : ${{ env.TOTAL_REQUESTS }}"
-          echo "Tests Run  : ${{ env.TESTS_TOTAL }}"
-          echo "Passed     : ${{ env.TESTS_PASSED }}"
-          echo "Failed     : ${{ env.TESTS_FAILED }}"
-          echo "Duration   : ${{ env.EXECUTION_TIME }}"
-          echo "=================================="
-          echo "📊 Download HTML report from Artifacts section above"
-          echo "📧 Email report sent to: ${{ secrets.NOTIFY_EMAIL }}"
+            Status  : ${{ job.status }}
+            Run     : #${{ github.run_number }}
+            Branch  : ${{ github.ref_name }}
+            Trigger : ${{ github.event_name }}
+
+            Newman HTML Report is attached.
+            Open the attachment in any browser to see:
+              - Summary (Total Requests, Pass/Fail count)
+              - Each request with response details
+              - Failed tests with error messages
+              - Light/Dark mode toggle
+
+            Regards,
+            FLW API Automation
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: FLW API Automation
+          attachments: reports/newman-report.html
