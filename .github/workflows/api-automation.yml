@@ -2,7 +2,7 @@ name: FLW API - Newman Automation
 
 on:
   schedule:
-    - cron: '30 4 * * *'    # Daily 10:00 AM IST (UTC+5:30)
+    - cron: '50 5 * * *' 
   workflow_dispatch:
 
 jobs:
