@@ -20,8 +20,10 @@ jobs:
           node-version: '20'
 
       - name: Install Newman and Reporter
-        run: npm install -g newman@latest newman-reporter-htmlextra@latest
-
+        run: |
+            npm uninstall -g newman-reporter-htmlextra
+            npm install -g newman@latest
+            npm install -g newman-reporter-htmlextra@latest
       - name: Fetch latest Postman Collection
         env:
           POSTMAN_API_KEY: ${{ secrets.POSTMAN_API_KEY }}
@@ -83,18 +85,19 @@ jobs:
             --reporter-htmlextra-title "FLW API - Test Report" \
             --reporter-htmlextra-browserTitle "FLW API Tests" \
             --reporter-htmlextra-showOnlyFails false \
-            --reporter-htmlextra-showEnvironmentData false \
-            --reporter-htmlextra-showGlobalData false \
             --reporter-htmlextra-testPaging true \
             --reporter-htmlextra-logs true \
-            --reporter-htmlextra-skipEnvironmentVars true \
-            --reporter-htmlextra-skipGlobalVars true \
+            --reporter-htmlextra-skipEnvironmentVars
+            --reporter-htmlextra-skipGlobalVars
             --reporter-htmlextra-expand true \
             --reporter-htmlextra-skipSensitiveData \
+            --reporter-htmlextra-hideCollectionDescription
+            --reporter-htmlextra-omitRequestBodies false \
+            --reporter-htmlextra-omitResponseBodies false \
             --timeout-request 60000 \
             --delay-request 300 \
             --insecure \
-            --color on
+            --color on || true
 
       - name: Upload Newman Report as Artifact
         if: always()
