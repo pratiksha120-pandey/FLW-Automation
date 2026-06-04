@@ -87,11 +87,11 @@ jobs:
             --reporter-htmlextra-showOnlyFails false \
             --reporter-htmlextra-testPaging true \
             --reporter-htmlextra-logs true \
-            --reporter-htmlextra-skipEnvironmentVars
-            --reporter-htmlextra-skipGlobalVars
+            --reporter-htmlextra-skipEnvironmentVars \
+            --reporter-htmlextra-skipGlobalVars \
             --reporter-htmlextra-expand true \
             --reporter-htmlextra-skipSensitiveData \
-            --reporter-htmlextra-hideCollectionDescription
+            --reporter-htmlextra-hideCollectionDescription \
             --reporter-htmlextra-omitRequestBodies false \
             --reporter-htmlextra-omitResponseBodies false \
             --timeout-request 60000 \
